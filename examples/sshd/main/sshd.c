@@ -19,78 +19,6 @@ struct ssh_poll_handle_struct *ssh_bind_get_poll(struct ssh_bind_struct *);
 int ssh_event_add_poll(ssh_event event, struct ssh_poll_handle_struct *);
 int ssh_event_remove_poll(ssh_event event, struct ssh_poll_handle_struct *);
 
-/*
- * Heavy API abuse here. But upstream doesn't provide a
- * native mechanism for loading host keys from memory.
- * We assume fields in "struct ssh_bind_struct" are laid
- * out in exactly this order:
- * ssh_key ecdsa;
- * ssh_key dsa;
- * ssh_key rsa;
- * ssh_key ed25519;
- * char *bindaddr;
- */
-static int
-import_embedded_host_key(ssh_bind sshbind, const char *base64_key)
-{
-	size_t ptralign = sizeof(void*);
-	char buf[2048];
-	char *p, *q, *e;
-	ssh_key *target;
-	int error;
-	ssh_key probe;
-	enum ssh_keytypes_e type;
-
-	ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_BINDADDR, "");
-	memcpy(buf, sshbind, sizeof(buf));
-	ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_BINDADDR,
-			     "0123456789ABCDEF0123456789ABCDEF");
-	p = buf;
-	e = p + sizeof(buf);
-	q = (char*)sshbind;
-	while (p < e) {
-		if (memcmp(p, q, ptralign) != 0)
-			break;
-		p += ptralign;
-		q += ptralign;
-	}
-	if (p >= e)
-		return SSH_ERROR;
-	probe = ssh_key_new();
-	if (probe == NULL)
-		return SSH_ERROR;
-	error = ssh_pki_import_privkey_base64(base64_key, NULL, NULL, NULL,
-					      &probe);
-	type = ssh_key_type(probe);
-	ssh_key_free(probe);
-	if (error != SSH_OK)
-		return error;
-	switch (type) {
-	case SSH_KEYTYPE_ECDSA_P256:
-	case SSH_KEYTYPE_ECDSA_P521:
-		target = (ssh_key*)((uintptr_t)sshbind + (p - buf)
-				    - 4 * ptralign);
-		break;
-	case SSH_KEYTYPE_DSS:
-		target = (ssh_key*)((uintptr_t)sshbind + (p - buf)
-				    - 3 * ptralign);
-		break;
-	case SSH_KEYTYPE_RSA:
-		target = (ssh_key*)((uintptr_t)sshbind + (p - buf)
-				    - 2 * ptralign);
-		break;
-	case SSH_KEYTYPE_ED25519:
-		target = (ssh_key*)((uintptr_t)sshbind + (p - buf)
-				    - 1 * ptralign);
-		break;
-	default:
-		return SSH_ERROR;
-	}
-	error = ssh_pki_import_privkey_base64(base64_key, NULL, NULL, NULL,
-					      target);
-	return error;
-}
-
 static struct client_ctx *
 lookup_client(struct server_ctx *sc, ssh_session session)
 {
@@ -358,7 +286,8 @@ create_new_server(struct server_ctx *sc)
 	}
 	ssh_bind_options_set(sc->sc_sshbind, SSH_BIND_OPTIONS_LOG_VERBOSITY_STR, "1");
 	ssh_bind_set_callbacks(sc->sc_sshbind, &sc->sc_bind_cb, sc);
-	import_embedded_host_key(sc->sc_sshbind, sc->sc_host_key);
+	ssh_bind_options_set(sc->sc_sshbind, SSH_BIND_OPTIONS_HOSTKEY, sc->sc_host_key);
+	//import_embedded_host_key(sc->sc_sshbind, sc->sc_host_key);
 	ssh_bind_options_set(sc->sc_sshbind, SSH_BIND_OPTIONS_BINDPORT_STR, "22");
 	ssh_bind_options_set(sc->sc_sshbind, SSH_BIND_OPTIONS_BINDADDR, "0.0.0.0");
 	if(ssh_bind_listen(sc->sc_sshbind) < 0) {

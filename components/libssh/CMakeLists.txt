@@ -66,6 +66,8 @@ set(srcs
   ${SRC}/pki_mbedcrypto.c
 )
 
+list (APPEND CFLAGS "-Wno-error=format -Wno-incompatible-pointer-types")
+
 idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS compat libssh/include
                     REQUIRES lwip mbedtls)

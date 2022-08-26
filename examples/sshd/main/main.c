@@ -19,7 +19,7 @@ app_main(void)
 	initialize_nvs();
 	initialize_wifi();
 	/* replace with SSID and passphrase */
-	wifi_sta_join("mywifi", "supasecret");
+	wifi_sta_join("BeunNetwerk", "thetruewifi");
 	start_sshd();
 }
 
